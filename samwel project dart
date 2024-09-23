@@ -1,0 +1,130 @@
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.0.0+3
+  path_provider: ^2.0.2 import 'package:flutter/material.dart';
+import 'package:sqflite/sqflite.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
+import 'dart:async';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'Banking App',
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+      ),
+      home: BankingScreen(),
+    );
+  }
+}
+
+class BankingScreen extends StatefulWidget {
+  @override
+  _BankingScreenState createState() => _BankingScreenState();
+}
+
+class _BankingScreenState extends State<BankingScreen> {
+  final _accountController = TextEditingController();
+  final _amountController = TextEditingController();
+  final _balance = 0.0;
+  final _transactions = [];
+
+  Future<Database> _openDatabase() async {
+    final directory = await getApplicationDocumentsDirectory();
+    final path = join(directory.path, 'banking.db');
+    return await openDatabase(path, version: 1, onCreate: (db, version) {
+      db.execute('''
+        CREATE TABLE accounts (
+          id INTEGER PRIMARY KEY,
+          balance REAL
+        )
+      ''');
+      db.execute('''
+        CREATE TABLE transactions (
+          id INTEGER PRIMARY KEY,
+          account_id INTEGER,
+          amount REAL,
+          timestamp TEXT
+        )
+      ''');
+    });
+  }
+
+  Future<void> _getBalance() async {
+    final db = await _openDatabase();
+    final account = await db.query('accounts', where: 'id = 1');
+    setState(() {
+      _balance = account[0]['balance'];
+    });
+  }
+
+  Future<void> _transferFunds() async {
+    final db = await _openDatabase();
+    final amount = double.parse(_amountController.text);
+    await db.update('accounts', {
+      'balance': _balance + amount,
+    }, where: 'id = 1');
+    await db.insert('transactions', {
+      'account_id': 1,
+      'amount': amount,
+      'timestamp': DateTime.now().toString(),
+    });
+    setState(() {
+      _balance += amount;
+      _transactions.add({
+        'amount': amount,
+        'timestamp': DateTime.now().toString(),
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Banking App'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            Text('Account Balance: $_balance'),
+            SizedBox(height: 20),
+            TextField(
+              controller: _amountController,
+              decoration: InputDecoration(
+                labelText: 'Enter amount to transfer',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _transferFunds,
+              child: Text('Transfer Funds'),
+            ),
+            SizedBox(height: 20),
+            Expanded(
+              child: ListView.builder(
+                itemCount: _transactions.length,
+                itemBuilder: (context, index) {
+                  return ListTile(
+                    title: Text('Transaction ${index + 1}'),
+                    subtitle: Text('Amount: ${_transactions[index]['amount']}'),
+                    trailing: Text(_transactions[index]['timestamp']),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
